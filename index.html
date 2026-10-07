@@ -67,7 +67,51 @@ function returnToBank(code){document.querySelectorAll('.slot').forEach(s=>{if(s.
 function place(code,slot){if(!code)return;document.querySelectorAll('.slot').forEach(s=>{if(s!==slot&&s.dataset.code===code)clearSlot(s)});const old=slot.dataset.code;if(old&&old!==code)clearSlot(slot);slot.dataset.code=code;slot.textContent=code;slot.classList.add('filled');slot.draggable=true;const tile=[...document.querySelectorAll('.tile')].find(t=>t.dataset.code===code);if(tile)tile.classList.add('used');selectedTile=null;document.querySelectorAll('.tile').forEach(x=>x.classList.remove('selected'))}
 $('checkBuild').onclick=()=>{const placed=[...document.querySelectorAll('.slot')].map(s=>s.dataset.code||'');const correct=placed.filter((x,i)=>x===starter[i]).length;if(correct===starter.length){feedback($('buildFeedback'),true,'Excellent! Your starter code is in the correct order. +20 points');award('build',20,20);$('continueBuild').classList.remove('hidden')}else feedback($('buildFeedback'),false,`${correct} of ${starter.length} lines are correct. Check the order of the head, title, body, and closing tags.`)};$('resetBuild').onclick=buildBoard;$('continueBuild').onclick=()=>openPanel('identify');
 function startIdentify(){identifyOrder=shuffle(identify.map((_,i)=>i));identifyPos=0;identifyCorrect=0;$('nextIdentify').onclick=nextIdentify;$('nextIdentify').textContent='Next Question';showIdentify()}
-function showIdentify(){const q=identify[identifyOrder[identifyPos]];const card=$('identifyCard');card.innerHTML='';const heading=document.createElement('h3');heading.textContent=q[0];card.append(heading);const choices=document.createElement('div');choices.className='choices';card.append(choices);q[1].forEach((a,i)=>{const b=document.createElement('button');b.className='choice';b.textContent=a;b.onclick=()=>{[...choices.children].forEach(x=>x.disabled=true);b.classList.add(i===q[2]?'correct':'wrong');if(i===q[2]){identifyCorrect++;feedback($('identifyFeedback'),true,`Correct! ${q[3]} +5 points`);award('identify',5,30)}else{choices.children[q[2]].classList.add('correct');feedback($('identifyFeedback'),false,`Not quite. ${q[3]}`)}$('nextIdentify').textContent=identifyPos===identifyOrder.length-1?'View Results':'Next Question';$('nextIdentify').classList.remove('hidden')};choices.append(b)});$('identifyFeedback').className='feedback';$('nextIdentify').classList.add('hidden');$('identifyProgress').style.width=`${identifyPos/identifyOrder.length*100}%`}
+function showIdentify(){
+  const q=identify[identifyOrder[identifyPos]];
+  const card=$('identifyCard');
+  card.innerHTML='';
+  let attempts=0;
+  const heading=document.createElement('h3');
+  heading.textContent=q[0];
+  card.append(heading);
+  const choices=document.createElement('div');
+  choices.className='choices';
+  card.append(choices);
+  q[1].forEach((a,i)=>{
+    const b=document.createElement('button');
+    b.className='choice';
+    b.textContent=a;
+    b.onclick=()=>{
+      attempts++;
+      if(i===q[2]){
+        [...choices.children].forEach(x=>x.disabled=true);
+        b.classList.add('correct');
+        identifyCorrect++;
+        feedback($('identifyFeedback'),true,`Correct! ${q[3]} +5 points`);
+        award('identify',5,30);
+        $('nextIdentify').textContent=identifyPos===identifyOrder.length-1?'View Results':'Next Question';
+        $('nextIdentify').classList.remove('hidden');
+        return;
+      }
+      b.classList.add('wrong');
+      b.disabled=true;
+      if(attempts<2){
+        feedback($('identifyFeedback'),false,'Not quite. Try again—you have one more chance.');
+        return;
+      }
+      [...choices.children].forEach(x=>x.disabled=true);
+      choices.children[q[2]].classList.add('correct');
+      feedback($('identifyFeedback'),false,`The correct answer is shown in green. ${q[3]}`);
+      $('nextIdentify').textContent=identifyPos===identifyOrder.length-1?'View Results':'Next Question';
+      $('nextIdentify').classList.remove('hidden');
+    };
+    choices.append(b);
+  });
+  $('identifyFeedback').className='feedback';
+  $('nextIdentify').classList.add('hidden');
+  $('identifyProgress').style.width=`${identifyPos/identifyOrder.length*100}%`;
+}
 function nextIdentify(){if(identifyPos===identifyOrder.length-1){finishIdentify();return}identifyPos++;showIdentify()}
 function finishIdentify(){const card=$('identifyCard');card.innerHTML='';const title=document.createElement('h3');title.textContent='Identify Activity Complete!';const result=document.createElement('p');result.innerHTML=`You answered <strong>${identifyCorrect} of ${identifyOrder.length}</strong> questions correctly.`;const review=document.createElement('p');review.textContent=identifyCorrect===identifyOrder.length?'Excellent work! You identified every HTML tag and concept correctly.':'Review paragraph tags, the body, the title, the doctype, and the difference between tags and content.';card.append(title,result,review);$('identifyProgress').style.width='100%';$('identifyFeedback').className='feedback';$('nextIdentify').textContent='Next Activity: Debug →';$('nextIdentify').onclick=()=>openPanel('debug');$('nextIdentify').classList.remove('hidden')}
 function normalize(s){return s.trim().toLowerCase().replace(/\s+/g,' ').replace(/\s*([<>])\s*/g,'$1').replace(/[.!](?=<\/p>)/g,'')}
