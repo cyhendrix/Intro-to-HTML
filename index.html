@@ -54,12 +54,79 @@ const bugs=[
  ["<p>HTML gives content structure.<p>","<p>HTML gives content structure.</p>","The second p tag needs a slash because it closes the paragraph."],
  ["<p></p>I like building websites.","<p>I like building websites.</p>","Place the text content between the opening and closing tags."]
 ];
-const MAX_POINTS=125;let activityScores={build:0,identify:0,debug:0,create:0},selectedTile=null,identifyOrder=[],identifyPos=0,identifyCorrect=0,debugOrder=[],debugPos=0;
+const MAX_POINTS=125;const LAB_PROGRESS_KEY='istPractice:'+location.pathname+':labState';let activityScores={build:0,identify:0,debug:0,create:0},selectedTile=null,identifyOrder=[],identifyPos=0,identifyCorrect=0,debugOrder=[],debugPos=0;
 const $=id=>document.getElementById(id);function totalScore(){return Object.values(activityScores).reduce((a,b)=>a+b,0)}function updateScore(){$('points').textContent=totalScore()}function award(key,n,max){activityScores[key]=Math.min(max,activityScores[key]+n);updateScore()}function resetAllScores(){activityScores={build:0,identify:0,debug:0,create:0};updateScore()}updateScore();
 function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
 function feedback(el,good,text){el.className=`feedback show ${good?'good':'bad'}`;el.textContent=text}
 function openPanel(id){document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));document.querySelector(`.tab[data-panel="${id}"]`).classList.add('active');$(id).classList.add('active');window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>openPanel(b.dataset.panel));
+function saveLabProgress(){
+  try{
+    const activePanel=document.querySelector('.panel.active');
+    const data={
+      started:!$('labActivities').classList.contains('hidden'),
+      activityScores:{...activityScores},
+      buildSlots:[...document.querySelectorAll('.slot')].map(s=>s.dataset.code||''),
+      identifyOrder:[...identifyOrder],
+      identifyPos,
+      identifyCorrect,
+      debugOrder:[...debugOrder],
+      debugPos,
+      activePanel:activePanel?activePanel.id:'build',
+      createValue:$('createInput').value,
+      repairValue:$('repairInput').value,
+      preview:$('browserPreview').textContent,
+      finishVisible:!$('finishCreate').classList.contains('hidden'),
+      resultVisible:!$('resultSubmit').classList.contains('hidden')
+    };
+    localStorage.setItem(LAB_PROGRESS_KEY,JSON.stringify(data));
+  }catch(e){}
+}
+function restoreLabProgress(){
+  let data;
+  try{data=JSON.parse(localStorage.getItem(LAB_PROGRESS_KEY)||'null')}catch(e){}
+  if(!data)return false;
+  if(data.activityScores){
+    activityScores={
+      build:Math.min(20,Number(data.activityScores.build)||0),
+      identify:Math.min(30,Number(data.activityScores.identify)||0),
+      debug:Math.min(60,Number(data.activityScores.debug)||0),
+      create:Math.min(15,Number(data.activityScores.create)||0)
+    };
+    updateScore();
+  }
+  if(Array.isArray(data.buildSlots)){
+    const slots=[...document.querySelectorAll('.slot')];
+    data.buildSlots.forEach((code,i)=>{if(code&&slots[i])place(code,slots[i])});
+  }
+  if(Array.isArray(data.identifyOrder)&&data.identifyOrder.length===identify.length){
+    identifyOrder=data.identifyOrder;
+    identifyPos=Math.max(0,Math.min(identify.length-1,Number(data.identifyPos)||0));
+    identifyCorrect=Math.max(0,Number(data.identifyCorrect)||0);
+    showIdentify();
+  }
+  if(Array.isArray(data.debugOrder)&&data.debugOrder.length===bugs.length){
+    debugOrder=data.debugOrder;
+    debugPos=Math.max(0,Math.min(bugs.length-1,Number(data.debugPos)||0));
+    showDebug();
+  }
+  if(typeof data.createValue==='string')$('createInput').value=data.createValue;
+  if(typeof data.repairValue==='string')$('repairInput').value=data.repairValue;
+  if(typeof data.preview==='string'&&data.preview)$('browserPreview').textContent=data.preview;
+  if(activityScores.build>=20)$('continueBuild').classList.remove('hidden');
+  if(data.finishVisible||activityScores.create>=15)$('finishCreate').classList.remove('hidden');
+  if(data.resultVisible){
+    $('finalResult').innerHTML=`<strong>${resultData().label}</strong>`;
+    $('resultSubmit').classList.remove('hidden');
+  }
+  if(data.started){
+    $('labActivities').classList.remove('hidden');
+    const panel=['build','identify','debug','create'].includes(data.activePanel)?data.activePanel:'build';
+    openPanel(panel);
+  }
+  return true;
+}
+
 function beginLab(){const first=$('firstName').value.trim(),last=$('lastName').value.trim(),name=`${last}, ${first}`,period=$('classPeriod').value;if(!first||!last||!period){feedback($('studentInfoFeedback'),false,'Enter your first name, last name, and choose your class period before beginning.');if(!first)$('firstName').focus();else if(!last)$('lastName').focus();else $('classPeriod').focus();return}feedback($('studentInfoFeedback'),true,`Welcome, ${first} ${last}! Your practice activities are ready.`);$('labActivities').classList.remove('hidden');openPanel('build');requestAnimationFrame(()=>$('labTabs').scrollIntoView({behavior:'smooth',block:'start'}))}$('beginLab').onclick=beginLab;
 function buildBoard(){selectedTile=null;$('slots').innerHTML='';$('tiles').innerHTML='';starter.forEach((_,i)=>{const s=document.createElement('div');s.className='slot';s.dataset.number=`${i+1}.`;s.dataset.index=i;s.tabIndex=0;s.draggable=false;s.ondragover=e=>e.preventDefault();s.ondragstart=e=>{if(!s.dataset.code){e.preventDefault();return}e.dataTransfer.setData('text',s.dataset.code)};s.ondrop=e=>{e.preventDefault();place(e.dataTransfer.getData('text'),s)};s.onclick=()=>{if(selectedTile)place(selectedTile.dataset.code,s);else if(s.dataset.code)clearSlot(s)};$('slots').append(s)});shuffle(starter).forEach(code=>{const t=document.createElement('div');t.className='tile';t.textContent=code;t.dataset.code=code;t.draggable=true;t.tabIndex=0;t.ondragstart=e=>e.dataTransfer.setData('text',code);t.onclick=()=>{document.querySelectorAll('.tile').forEach(x=>x.classList.remove('selected'));selectedTile=t;t.classList.add('selected')};$('tiles').append(t)});$('tiles').ondragover=e=>e.preventDefault();$('tiles').ondrop=e=>{e.preventDefault();returnToBank(e.dataTransfer.getData('text'))};$('buildFeedback').className='feedback';$('continueBuild').classList.add('hidden')}
 function clearSlot(slot){const code=slot.dataset.code;if(!code)return;slot.dataset.code='';slot.textContent='';slot.classList.remove('filled');slot.draggable=false;const tile=[...document.querySelectorAll('.tile')].find(t=>t.dataset.code===code);if(tile)tile.classList.remove('used')}
@@ -119,7 +186,11 @@ function startDebug(){debugOrder=shuffle(bugs.map((_,i)=>i));debugPos=0;$('repai
 function showDebug(){const q=bugs[debugOrder[debugPos]];$('brokenCode').textContent=q[0];$('repairInput').value='';$('repairFeedback').className='feedback';$('nextRepair').classList.add('hidden');$('checkRepair').classList.remove('hidden');$('debugProgress').style.width=`${debugPos/debugOrder.length*100}%`}
 $('checkRepair').onclick=()=>{const q=bugs[debugOrder[debugPos]];if(normalize($('repairInput').value)===normalize(q[1])){feedback($('repairFeedback'),true,`Correct! ${q[2]} +10 points`);award('debug',10,60);$('nextRepair').textContent=debugPos===debugOrder.length-1?'View Results':'Next Bug';$('nextRepair').classList.remove('hidden');$('checkRepair').classList.add('hidden')}else feedback($('repairFeedback'),false,`Keep debugging. Hint: ${q[2]}`)};
 function nextRepair(){if(debugPos===debugOrder.length-1){$('brokenCode').textContent='Debug Activity Complete!';$('repairInput').classList.add('hidden');feedback($('repairFeedback'),true,`You successfully corrected all ${debugOrder.length} paragraph bugs.`);$('debugProgress').style.width='100%';$('nextRepair').textContent='Next Activity: Create →';$('nextRepair').onclick=()=>openPanel('create');return}debugPos++;showDebug()}
-$('checkCreate').onclick=()=>{const raw=$('createInput').value.trim();const match=raw.match(/^<p>([\s\S]+)<\/p>$/i);if(match&&match[1].trim()){feedback($('createFeedback'),true,'Your paragraph has an opening tag, content, and a matching closing tag. +15 points');$('browserPreview').textContent=match[1].trim();award('create',15,15);$('finishCreate').classList.remove('hidden')}else feedback($('createFeedback'),false,'Check your structure. Use <p> to open the paragraph, add text, and use </p> to close it.')};$('clearCreate').onclick=()=>{$('createInput').value='';$('browserPreview').textContent='Your paragraph will appear here after it passes the test.';$('createFeedback').className='feedback';$('finishCreate').classList.add('hidden')};function resultData(){const earned=totalScore(),grade=Math.round(earned/MAX_POINTS*100);return{earned,grade,label:`${earned} points out of ${MAX_POINTS} — Grade: ${grade}%`}}$('finishCreate').onclick=()=>{feedback($('createFeedback'),true,'Practice complete! You built HTML structure, identified tags, debugged paragraphs, and created your own paragraph.');$('finalResult').innerHTML=`<strong>${resultData().label}</strong>`;$('resultSubmit').classList.remove('hidden');$('resultSubmit').scrollIntoView({behavior:'smooth',block:'center'});$('finishCreate').textContent='Start Again ↻';$('finishCreate').onclick=()=>{resetAllScores();buildBoard();startIdentify();startDebug();$('createInput').value='';$('repairInput').classList.remove('hidden');$('finishCreate').textContent='Finish Practice ✓';$('finishCreate').classList.add('hidden');$('resultSubmit').classList.add('hidden');$('submitResults').disabled=false;$('submitFeedback').className='feedback';openPanel('build')}};
+$('checkCreate').onclick=()=>{const raw=$('createInput').value.trim();const match=raw.match(/^<p>([\s\S]+)<\/p>$/i);if(match&&match[1].trim()){feedback($('createFeedback'),true,'Your paragraph has an opening tag, content, and a matching closing tag. +15 points');$('browserPreview').textContent=match[1].trim();award('create',15,15);$('finishCreate').classList.remove('hidden')}else feedback($('createFeedback'),false,'Check your structure. Use <p> to open the paragraph, add text, and use </p> to close it.')};$('clearCreate').onclick=()=>{$('createInput').value='';$('browserPreview').textContent='Your paragraph will appear here after it passes the test.';$('createFeedback').className='feedback';$('finishCreate').classList.add('hidden')};function resultData(){const earned=totalScore(),grade=Math.round(earned/MAX_POINTS*100);return{earned,grade,label:`${earned} points out of ${MAX_POINTS} — Grade: ${grade}%`}}$('finishCreate').onclick=()=>{feedback($('createFeedback'),true,'Practice complete! You built HTML structure, identified tags, debugged paragraphs, and created your own paragraph.');$('finalResult').innerHTML=`<strong>${resultData().label}</strong>`;$('resultSubmit').classList.remove('hidden');$('resultSubmit').scrollIntoView({behavior:'smooth',block:'center'});$('finishCreate').textContent='Start Again ↻';$('finishCreate').onclick=()=>{resetAllScores();buildBoard();startIdentify();startDebug();restoreLabProgress();
+document.addEventListener('click',()=>setTimeout(saveLabProgress,0));
+document.addEventListener('input',()=>setTimeout(saveLabProgress,0));
+document.addEventListener('change',()=>setTimeout(saveLabProgress,0));
+window.addEventListener('beforeunload',saveLabProgress);$('createInput').value='';$('repairInput').classList.remove('hidden');$('finishCreate').textContent='Finish Practice ✓';$('finishCreate').classList.add('hidden');$('resultSubmit').classList.add('hidden');$('submitResults').disabled=false;$('submitFeedback').className='feedback';openPanel('build')}};
 function sendResults(){const first=$('firstName').value.trim(),last=$('lastName').value.trim(),name=`${last}, ${first}`,period=$('classPeriod').value,r=resultData();if(!first||!last||!period){feedback($('submitFeedback'),false,'Please enter your first name, last name, and choose your class period at the top of the lab.');if(!first)$('firstName').focus();else if(!last)$('lastName').focus();else $('classPeriod').focus();return}const form=document.createElement('form');form.method='POST';form.action='https://docs.google.com/forms/d/e/1FAIpQLSd4wTjzGT39UHEQ8WdzPMXfDMhVJ8d6BzioxzQXqz5zevRWdw/formResponse';form.target='resultsTarget';form.className='hidden';[['entry.2089413779',name],['entry.890934651',period],['entry.646173439','Lesson 02 | Intro to HTML'],['entry.962158861',String(r.grade)]].forEach(([key,value])=>{const input=document.createElement('input');input.name=key;input.value=value;form.append(input)});document.body.append(form);form.submit();form.remove();$('submitResults').disabled=true;feedback($('submitFeedback'),true,`Results submitted for ${first} ${last}: ${r.label}.`)}$('submitResults').onclick=sendResults;
 buildBoard();startIdentify();startDebug();
 </script>
@@ -212,7 +283,7 @@ buildBoard();startIdentify();startDebug();
     };
     document.getElementById("clearSavedPractice").onclick=()=>{
       if(!confirm("Clear saved work and the saved grade from this computer?"))return;
-      localStorage.removeItem(draftKey);localStorage.removeItem(pendingKey);
+      localStorage.removeItem(draftKey);localStorage.removeItem(pendingKey);localStorage.removeItem(baseKey+':labState');
       status().textContent="Saved work was cleared. Refresh the page to start over.";
     };
   });
